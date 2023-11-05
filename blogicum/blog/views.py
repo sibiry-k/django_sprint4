@@ -3,33 +3,25 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Count
 from django.http import Http404
 from django.views.generic import (
     CreateView, DeleteView, DetailView, ListView, UpdateView,
 )
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse, reverse_lazy
-from django.utils import timezone
 
 from .models import Post, Category, Comment
 from .forms import PostForm, CommentForm
-
+from .mixins import (
+    PostMixin, PostGetQuerySetMixin, ProfileGetPostsMixin,
+)
 from . import constants
 
 
 User = get_user_model()
 
 
-class PostMixin:
-    """Mixin for Post."""
-
-    model = Post
-    form_class = PostForm
-    success_url = reverse_lazy('blog:index')
-
-
-class PostListView(ListView):
+class PostListView(PostGetQuerySetMixin, ListView):
     """Display all posts in index page."""
 
     model = Post
@@ -37,11 +29,7 @@ class PostListView(ListView):
     template_name = 'blog/index.html'
 
     def get_queryset(self):
-        return Post.objects.filter(
-            pub_date__lt=timezone.now(),
-            is_published=True,
-            category__is_published=True,
-        ).annotate(comment_count=Count('comments')).order_by('-pub_date')
+        return self.get_queryset_posts()
 
 
 class PostCreateView(LoginRequiredMixin, PostMixin, CreateView):
@@ -92,11 +80,9 @@ class PostDetailView(DetailView):
         object = get_object_or_404(Post, pk=self.kwargs['pk'])
         if object.is_published == constants.TTRUE:
             return object
-        else:
-            if object.author == self.request.user:
-                return object
-            else:
-                raise Http404
+        if object.author == self.request.user:
+            return object
+        raise Http404
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -127,31 +113,31 @@ class PostDeleteView(LoginRequiredMixin, DeleteView):
         return context
 
 
-def category_posts(request, slug):
-    """Dispaly all post in category."""
-    category = get_object_or_404(
-        Category,
-        slug=slug,
-        is_published=True
-    )
-    posts = category.posts.filter(
-        pub_date__lt=timezone.now(),
-        is_published=True,
-        category__is_published=True,
-    ).annotate(
-        comment_count=Count('comments')
-    ).order_by('-pub_date')
-    paginator = Paginator(posts, constants.PAGINATE_PAGE_NUM)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    context = {
-        'page_obj': page_obj,
-        'category': category,
-    }
-    return render(request, 'blog/category.html', context)
+class CategoryDetailView(PostGetQuerySetMixin, DetailView):
+    """Display all posts in Category."""
+
+    model = Category
+    context_object_name = 'category'
+    template_name = 'blog/category.html'
+
+    def get_object(self):
+        object = get_object_or_404(
+            Category,
+            slug=self.kwargs['slug'],
+            is_published=True
+        )
+        return object
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        posts = self.get_queryset_posts().filter(category=self.object)
+        paginator = Paginator(posts, constants.PAGINATE_PAGE_NUM)
+        page_number = self.request.GET.get('page')
+        context['page_obj'] = paginator.get_page(page_number)
+        return context
 
 
-class ProfileDetailView(DetailView):
+class ProfileDetailView(ProfileGetPostsMixin, DetailView):
     """Display profile."""
 
     model = User
@@ -163,25 +149,7 @@ class ProfileDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if self.object != self.request.user:
-            posts = Post.objects.filter(
-                author_id=self.object.id,
-                pub_date__lt=timezone.now(),
-                is_published=True,
-                category__is_published=True,
-            ).order_by(
-                '-pub_date'
-            ).annotate(
-                comment_count=Count('comments')
-            )
-        else:
-            posts = Post.objects.filter(
-                author_id=self.object.id
-            ).order_by(
-                '-pub_date'
-            ).annotate(
-                comment_count=Count('comments')
-            )
+        posts = self.get_posts()
         paginator = Paginator(posts, constants.PAGINATE_PAGE_NUM)
         page_number = self.request.GET.get('page')
         page_obj = paginator.get_page(page_number)
