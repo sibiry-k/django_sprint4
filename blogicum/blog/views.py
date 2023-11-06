@@ -78,7 +78,7 @@ class PostDetailView(DetailView):
 
     def get_object(self):
         object = get_object_or_404(Post, pk=self.kwargs['pk'])
-        if object.is_published == constants.TTRUE:
+        if object.is_published is True:
             return object
         if object.author == self.request.user:
             return object
@@ -121,12 +121,11 @@ class CategoryDetailView(PostGetQuerySetMixin, DetailView):
     template_name = 'blog/category.html'
 
     def get_object(self):
-        object = get_object_or_404(
+        return get_object_or_404(
             Category,
             slug=self.kwargs['slug'],
             is_published=True
         )
-        return object
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

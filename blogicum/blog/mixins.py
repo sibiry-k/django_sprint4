@@ -26,19 +26,10 @@ class PostGetQuerySetMixin:
         ).order_by('-pub_date')
 
 
-class ProfileGetPostsMixin:
+class ProfileGetPostsMixin(PostGetQuerySetMixin):
     def get_posts(self):
         if self.object != self.request.user:
-            posts = Post.objects.filter(
-                author_id=self.object.id,
-                pub_date__lt=timezone.now(),
-                is_published=True,
-                category__is_published=True,
-            ).order_by(
-                '-pub_date'
-            ).annotate(
-                comment_count=Count('comments')
-            )
+            posts = self.get_queryset_posts().filter(author_id=self.object.id)
         else:
             posts = Post.objects.filter(
                 author_id=self.object.id
