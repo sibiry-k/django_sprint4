@@ -2,19 +2,17 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.core.paginator import Paginator
 from django.http import Http404
 from django.views.generic import (
     CreateView, DeleteView, DetailView, ListView, UpdateView,
 )
+from django.views.generic.list import MultipleObjectMixin
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse, reverse_lazy
 
 from .models import Post, Category, Comment
 from .forms import PostForm, CommentForm
-from .mixins import (
-    PostMixin, PostGetQuerySetMixin, ProfileGetPostsMixin,
-)
+from .mixins import (PostMixin, PostGetQuerySetMixin)
 from . import constants
 
 
@@ -113,11 +111,14 @@ class PostDeleteView(LoginRequiredMixin, DeleteView):
         return context
 
 
-class CategoryDetailView(PostGetQuerySetMixin, DetailView):
+class CategoryDetailView(PostGetQuerySetMixin,
+                         MultipleObjectMixin,
+                         DetailView):
     """Display all posts in Category."""
 
     model = Category
     context_object_name = 'category'
+    paginate_by = constants.PAGINATE_PAGE_NUM
     template_name = 'blog/category.html'
 
     def get_object(self):
@@ -128,31 +129,33 @@ class CategoryDetailView(PostGetQuerySetMixin, DetailView):
         )
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        posts = self.get_queryset_posts().filter(category=self.object)
-        paginator = Paginator(posts, constants.PAGINATE_PAGE_NUM)
-        page_number = self.request.GET.get('page')
-        context['page_obj'] = paginator.get_page(page_number)
+        object_list = self.get_queryset_posts().filter(category=self.object)
+        context = super().get_context_data(
+            object_list=object_list,
+            **kwargs
+        )
         return context
 
 
-class ProfileDetailView(ProfileGetPostsMixin, DetailView):
+class ProfileDetailView(PostGetQuerySetMixin,
+                        MultipleObjectMixin,
+                        DetailView):
     """Display profile."""
 
     model = User
     fields = '__all__'
-    context_object_name = 'profile'
     slug_field = 'username'
     slug_url_kwarg = 'username'
+    paginate_by = constants.PAGINATE_PAGE_NUM
     template_name = 'blog/profile.html'
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        posts = self.get_posts()
-        paginator = Paginator(posts, constants.PAGINATE_PAGE_NUM)
-        page_number = self.request.GET.get('page')
-        page_obj = paginator.get_page(page_number)
-        context['page_obj'] = page_obj
+        object_list = self.get_queryset_posts_with_filter()
+        context = super().get_context_data(
+            object_list=object_list,
+            **kwargs
+        )
+        context['profile'] = self.object
         return context
 
 

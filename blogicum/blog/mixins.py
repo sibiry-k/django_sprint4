@@ -1,6 +1,5 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Count
-from django.urls import reverse_lazy
 from django.utils import timezone
 
 from .models import Post
@@ -12,7 +11,6 @@ User = get_user_model()
 class PostMixin:
     model = Post
     form_class = PostForm
-    success_url = reverse_lazy('blog:index')
 
 
 class PostGetQuerySetMixin:
@@ -25,9 +23,7 @@ class PostGetQuerySetMixin:
             comment_count=Count('comments')
         ).order_by('-pub_date')
 
-
-class ProfileGetPostsMixin(PostGetQuerySetMixin):
-    def get_posts(self):
+    def get_queryset_posts_with_filter(self):
         if self.object != self.request.user:
             posts = self.get_queryset_posts().filter(author_id=self.object.id)
         else:
